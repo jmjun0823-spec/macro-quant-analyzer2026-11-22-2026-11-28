@@ -32,7 +32,7 @@ jobs:
 
       - name: Run unit tests with pytest
         run: |
-          pytest -v tests/
+          python -m pytest -v tests/
 
       - name: Run full quantitative pipeline
         run: |
