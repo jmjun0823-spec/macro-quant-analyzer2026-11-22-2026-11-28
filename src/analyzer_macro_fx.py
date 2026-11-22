@@ -13,11 +13,7 @@ def _safe_ols_beta(y: pd.Series, x: pd.Series):
 
 
 def analyze_macro_and_fx_sensitivity(data: dict, params: dict) -> dict:
-    """
-    [가설 1 & 4]
-    휴장일 불일치로 인한 과도한 교집합 손실을 줄이기 위해
-    개별 쌍(pair) 회귀와 국면별 분석을 필요한 컬럼 기준으로 분리 수행[cite: 1, 3]
-    """
+    """DXY·미 10년물 금리·원/달러 환율 민감도 및 환율 국면별 KOSPI·SOX·EWY 성과 분석"""
     dxy_ret = data.get("DXY", pd.DataFrame()).get("Return", pd.Series(dtype=float))
     usdkrw_ret = data.get("USDKRW", pd.DataFrame()).get("Return", pd.Series(dtype=float))
     usdkrw_close = data.get("USDKRW", pd.DataFrame()).get("Close", pd.Series(dtype=float))
