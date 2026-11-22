@@ -4,6 +4,7 @@ from src.data_loader import fetch_global_data, fetch_krx_etf_data
 from src.analyzer_thanksgiving import analyze_thanksgiving_anomaly
 from src.analyzer_year_end import analyze_year_end_rotation
 from src.analyzer_macro_fx import analyze_macro_and_fx_sensitivity
+from src.analyzer_all_items import derive_all_report_items
 from src.quant_allocation import simulate_tactical_allocation
 from src.visualization import generate_charts
 
@@ -13,6 +14,7 @@ def _build_markdown_summary(report: dict) -> str:
     t = report["2_Thanksgiving_Calendar_Anomaly"]
     y = report["3_YearEnd_BookClosing_and_Dividend_Rotation"]
     q = report["4_Quant_Risk_and_Allocation"]
+    all_items = report["5_All_Report_Items_and_Checkpoints"]
 
     lines = [
         "# 11월 4주차 매크로 및 계절성 정량 검증 리포트",
@@ -37,12 +39,19 @@ def _build_markdown_summary(report: dict) -> str:
         lines.append(
             f"- 스타일 ETF({y['etf_period']}): 고배당 {y['avg_highdiv_ret_pct']}% vs 코스닥150 {y['avg_kosdaq150_ret_pct']}% (고배당 알파 {y['highdiv_alpha_pct']}%p, 승률 {y['highdiv_outperform_win_rate_pct']}%, p={y['etf_spread_p_value']})"
         )
+
     lines.extend([
         "",
         "## 4. 리스크 및 전술적 비중 시뮬레이션",
         f"- 벤치마크(70/30): 연수익 {q['benchmark_risk_70_30']['ann_return_pct']}%, 변동성 {q['benchmark_risk_70_30']['ann_volatility_pct']}%, Vol Drag {q['benchmark_risk_70_30']['ann_volatility_drag_pct']}%, 95% CVaR {q['benchmark_risk_70_30']['daily_cvar_95_pct']}%",
         f"- 환율 국면 전술 배분: 연수익 {q['tactical_fx_regime']['ann_return_pct']}%, 변동성 {q['tactical_fx_regime']['ann_volatility_pct']}%, Vol Drag {q['tactical_fx_regime']['ann_volatility_drag_pct']}%, 95% CVaR {q['tactical_fx_regime']['daily_cvar_95_pct']}%",
+        "",
+        "## 5. 확장 프록시 및 체크포인트",
+        f"- 소비/물류 프록시: XRT 연환산 {all_items['2_bfcm_consumption_proxies']['retail_xrt_ann_ret_pct']}% (BFCM 구간 평균 {all_items['2_bfcm_consumption_proxies']['xrt_bfcm_window_avg_ret_pct']}%), IYT 연환산 {all_items['2_bfcm_consumption_proxies']['transport_logistics_iyt_ann_ret_pct']}%",
     ])
+    for cp in all_items["5_checkpoints_and_pending_items"]:
+        lines.append(f"- [{cp['status']}] {cp['item']} → {cp['check_criteria']}")
+
     return "\n".join(lines)
 
 
@@ -73,6 +82,7 @@ def main():
     print("[4/5] 매크로 금리·환율·외국인 프록시 민감도 및 전술 배분 검증 중...")
     macro_results = analyze_macro_and_fx_sensitivity(global_data, params)
     alloc_results = simulate_tactical_allocation(global_data, params)
+    all_items_results = derive_all_report_items(global_data, krx_etf_data, params)
 
     print("[5/5] 리포트 및 시각화 차트 생성 중...")
     charts = generate_charts(tg_results, ye_results, OUTPUT_DIR)
@@ -82,6 +92,7 @@ def main():
         "2_Thanksgiving_Calendar_Anomaly": tg_results,
         "3_YearEnd_BookClosing_and_Dividend_Rotation": ye_results,
         "4_Quant_Risk_and_Allocation": alloc_results,
+        "5_All_Report_Items_and_Checkpoints": all_items_results,
         "generated_charts": charts,
     }
 
