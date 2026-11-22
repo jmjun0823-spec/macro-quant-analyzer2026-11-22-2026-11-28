@@ -1,10 +1,11 @@
 import json
-from src.config_loader import load_config, OUTPUT_DIR
+from src.config_loader import load_config, ROOT_DIR, OUTPUT_DIR
 from src.data_loader import fetch_global_data, fetch_krx_etf_data
 from src.analyzer_thanksgiving import analyze_thanksgiving_anomaly
 from src.analyzer_year_end import analyze_year_end_rotation
 from src.analyzer_macro_fx import analyze_macro_and_fx_sensitivity
 from src.analyzer_all_items import derive_all_report_items
+from src.checkpoint_evaluator import evaluate_checkpoints
 from src.quant_allocation import simulate_tactical_allocation
 from src.visualization import generate_charts
 
@@ -15,6 +16,7 @@ def _build_markdown_summary(report: dict) -> str:
     y = report["3_YearEnd_BookClosing_and_Dividend_Rotation"]
     q = report["4_Quant_Risk_and_Allocation"]
     all_items = report["5_All_Report_Items_and_Checkpoints"]
+    cp_eval = report["6_Checkpoint_Event_Evaluation"]
 
     lines = [
         "# 11월 4주차 매크로 및 계절성 정량 검증 리포트",
@@ -52,6 +54,16 @@ def _build_markdown_summary(report: dict) -> str:
     for cp in all_items["5_checkpoints_and_pending_items"]:
         lines.append(f"- [{cp['status']}] {cp['item']} → {cp['check_criteria']}")
 
+    lines.extend([
+        "",
+        f"## 6. 발표·원장 입력값 자동 판정 ({cp_eval['status']})",
+    ])
+    if cp_eval["evaluations"]:
+        for ev in cp_eval["evaluations"]:
+            lines.append(f"- **{ev['checkpoint']}** (`{ev['value']}`): {ev['signal']}")
+    else:
+        lines.append("- `data/checkpoints_input.json`에 11/25~27 발표 및 원장 수치를 입력 후 재실행하면 자동 판정이 출력됩니다.")
+
     return "\n".join(lines)
 
 
@@ -83,6 +95,7 @@ def main():
     macro_results = analyze_macro_and_fx_sensitivity(global_data, params)
     alloc_results = simulate_tactical_allocation(global_data, params)
     all_items_results = derive_all_report_items(global_data, krx_etf_data, params)
+    checkpoint_eval = evaluate_checkpoints(ROOT_DIR / "data" / "checkpoints_input.json")
 
     print("[5/5] 리포트 및 시각화 차트 생성 중...")
     charts = generate_charts(tg_results, ye_results, OUTPUT_DIR)
@@ -93,6 +106,7 @@ def main():
         "3_YearEnd_BookClosing_and_Dividend_Rotation": ye_results,
         "4_Quant_Risk_and_Allocation": alloc_results,
         "5_All_Report_Items_and_Checkpoints": all_items_results,
+        "6_Checkpoint_Event_Evaluation": checkpoint_eval,
         "generated_charts": charts,
     }
 
