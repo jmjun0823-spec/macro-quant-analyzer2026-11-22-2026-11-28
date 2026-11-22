@@ -10,6 +10,7 @@ import pytest
 from src.analyzer_thanksgiving import get_thanksgiving_dates, analyze_thanksgiving_anomaly
 from src.analyzer_year_end import analyze_year_end_rotation
 from src.analyzer_macro_fx import analyze_macro_and_fx_sensitivity
+from src.analyzer_all_items import derive_all_report_items
 from src.quant_allocation import simulate_tactical_allocation
 
 
@@ -52,6 +53,9 @@ def test_empty_dataframe_handling():
 
     macro_out = analyze_macro_and_fx_sensitivity({}, {"fx_ma_window": 20})
     assert macro_out["obs_count"] == 0
+
+    all_out = derive_all_report_items({}, pd.DataFrame(), {"trading_days_per_year": 252})
+    assert "5_checkpoints_and_pending_items" in all_out
 
 
 def test_year_end_holiday_gap_and_fixed_spread():
