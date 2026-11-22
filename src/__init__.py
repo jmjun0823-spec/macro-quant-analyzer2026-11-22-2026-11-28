@@ -5,6 +5,7 @@ __all__ = [
     "analyzer_year_end",
     "analyzer_macro_fx",
     "analyzer_all_items",
+    "checkpoint_evaluator",
     "quant_allocation",
     "visualization",
 ]
