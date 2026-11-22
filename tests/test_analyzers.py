@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -11,6 +12,7 @@ from src.analyzer_thanksgiving import get_thanksgiving_dates, analyze_thanksgivi
 from src.analyzer_year_end import analyze_year_end_rotation
 from src.analyzer_macro_fx import analyze_macro_and_fx_sensitivity
 from src.analyzer_all_items import derive_all_report_items
+from src.checkpoint_evaluator import evaluate_checkpoints
 from src.quant_allocation import simulate_tactical_allocation
 
 
@@ -102,3 +104,18 @@ def test_signal_lag_prevents_lookahead_bias():
     res = simulate_tactical_allocation(data, params)
     assert res["tactical_fx_regime"]["ann_volatility_pct"] is not None
     assert res["tactical_fx_regime"]["ann_volatility_pct"] > 0
+
+
+def test_checkpoint_evaluator(tmp_path: Path):
+    sample_file = tmp_path / "checkpoints_input.json"
+    sample_file.write_text(
+        json.dumps({
+            "us_macro_1125": {"core_pce_mom_pct": 0.2, "gdp_q3_rev_saar_pct": 3.5},
+            "bok_mpb_1126": {"gdp_2027_forecast_revised_down": True},
+            "flows_and_etf_lp": {"us_etf_max_spread_pct": 0.45, "us_etf_max_disparity_pct": 0.8},
+        }),
+        encoding="utf-8",
+    )
+    res = evaluate_checkpoints(sample_file)
+    assert res["status"] == "evaluated_with_provided_inputs"
+    assert len(res["evaluations"]) == 4
