@@ -22,7 +22,7 @@ def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fetch_global_data(cfg: dict) -> dict:
-    """Yahoo Finance에서 글로벌 지수, 환율, 금리 최장기 일봉 데이터 수집"""
+    """Yahoo Finance에서 글로벌 지수, 환율, 금리 및 섹터 프록시 일봉 수집"""
     data_store = {}
     end_date = cfg["end_date"]
     tickers = cfg["tickers"]
@@ -33,6 +33,8 @@ def fetch_global_data(cfg: dict) -> dict:
             start = start_dates["US_EQUITY"]
         elif name in ["KOSPI", "KOSDAQ"]:
             start = start_dates["KR_EQUITY"]
+        elif name in ["XRT", "IYT", "TLT", "HYG"]:
+            start = start_dates.get("SECTOR_PROXIES", start_dates["RATES_FX"])
         else:
             start = start_dates["RATES_FX"]
 
@@ -43,7 +45,7 @@ def fetch_global_data(cfg: dict) -> dict:
 
 
 def fetch_krx_etf_data(cfg: dict) -> pd.DataFrame:
-    """FinanceDataReader를 통해 국내 스타일별 ETF 수정주가 수집"""
+    """FinanceDataReader를 통해 국내 스타일/섹터 ETF 수정주가 수집"""
     close_dict = {}
     start = cfg["start_dates"]["KRX_ETF"]
     end_date = cfg["end_date"]
