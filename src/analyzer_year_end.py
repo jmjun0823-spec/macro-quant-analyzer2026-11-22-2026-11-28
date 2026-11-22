@@ -9,10 +9,7 @@ def _compute_window_spreads(
     end_mmdd: str = "12-26",
     min_obs: int = 2,
 ) -> pd.DataFrame:
-    """
-    매년 [start_mmdd ~ end_mmdd] 구간 수익률 및 스프레드(A - B) 계산
-    (휴장일 공백으로 실제 거래일 수가 적어도 시작/종료 관측치가 있으면 min_obs=2로 계산)
-    """
+    """매년 [start_mmdd ~ end_mmdd] 구간 수익률 및 스프레드(A - B) 계산"""
     if series_a is None or series_b is None or series_a.empty or series_b.empty:
         return pd.DataFrame(columns=["Year", "Ret_A", "Ret_B", "Spread_A_minus_B"])
 
@@ -42,10 +39,7 @@ def analyze_year_end_rotation(
     start_mmdd: str = "11-20",
     end_mmdd: str = "12-26",
 ) -> dict:
-    """
-    [가설 3] 11월 말~12월 배당락 직전 구간:
-    북클로징·배당 차익거래 수혜(대형주/고배당주) vs 대주주 양도세·베타 축소 매물(코스닥/중소형주) 검증[cite: 1]
-    """
+    """11월 말~12월 배당락 직전 대형주·고배당주 vs 코스닥·중소형주 수급 로테이션 검증"""
     kospi_close = kospi_df["Close"] if (kospi_df is not None and "Close" in kospi_df.columns) else pd.Series(dtype=float)
     kosdaq_close = kosdaq_df["Close"] if (kosdaq_df is not None and "Close" in kosdaq_df.columns) else pd.Series(dtype=float)
 
