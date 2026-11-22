@@ -1,0 +1,39 @@
+{
+  "start_dates": {
+    "US_EQUITY": "1950-01-01",
+    "KR_EQUITY": "1997-01-01",
+    "RATES_FX": "2003-12-01",
+    "KRX_ETF": "2012-01-01"
+  },
+  "tickers": {
+    "SP500": "^GSPC",
+    "NASDAQ": "^IXIC",
+    "DXY": "DX-Y.NYB",
+    "US10Y": "^TNX",
+    "USDKRW": "KRW=X",
+    "KOSPI": "^KS11",
+    "KOSDAQ": "^KQ11",
+    "SOX": "^SOX",
+    "EWY": "EWY"
+  },
+  "krx_etfs": {
+    "KODEX_200": "069500",
+    "ARIRANG_HIGHDIV": "161510",
+    "KODEX_KOSDAQ150": "229200",
+    "TIGER_SEMICON": "091230"
+  },
+  "parameters": {
+    "volume_lookback_days": 20,
+    "year_end_start_mmdd": "11-20",
+    "year_end_end_mmdd": "12-26",
+    "fx_ma_window": 20,
+    "fx_quantile_window": 252,
+    "fx_high_quantile": 0.80,
+    "fx_reversal_days": 5,
+    "fx_reversal_threshold": -0.005,
+    "high_fx_weight": 0.4,
+    "low_fx_weight": 0.9,
+    "random_seed": 42,
+    "trading_days_per_year": 252
+  }
+}
