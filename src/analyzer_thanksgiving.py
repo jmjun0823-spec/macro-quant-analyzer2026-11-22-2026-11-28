@@ -35,10 +35,7 @@ def get_thanksgiving_dates(years) -> pd.DatetimeIndex:
 
 
 def analyze_thanksgiving_anomaly(sp500_df: pd.DataFrame, lookback_days: int = 20) -> dict:
-    """
-    [가설 2] 추수감사절 주간(월~금) 및 블랙프라이데이의 거래량 급감(-30~40%)
-    및 수익률/변동성 계절성 통계 검증
-    """
+    """추수감사절 주간(월~금) 및 블랙프라이데이 거래량 급감 및 수익률/변동성 통계 검증"""
     if sp500_df is None or sp500_df.empty:
         return _empty_thanksgiving_result(lookback_days)
 
