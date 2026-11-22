@@ -3,6 +3,7 @@
     "US_EQUITY": "1950-01-01",
     "KR_EQUITY": "1997-01-01",
     "RATES_FX": "2003-12-01",
+    "SECTOR_PROXIES": "2006-01-01",
     "KRX_ETF": "2012-01-01"
   },
   "tickers": {
@@ -14,13 +15,19 @@
     "KOSPI": "^KS11",
     "KOSDAQ": "^KQ11",
     "SOX": "^SOX",
-    "EWY": "EWY"
+    "EWY": "EWY",
+    "XRT": "XRT",
+    "IYT": "IYT",
+    "TLT": "TLT",
+    "HYG": "HYG"
   },
   "krx_etfs": {
     "KODEX_200": "069500",
+    "KODEX_200_TR": "305720",
     "ARIRANG_HIGHDIV": "161510",
     "KODEX_KOSDAQ150": "229200",
-    "TIGER_SEMICON": "091230"
+    "TIGER_SEMICON": "091230",
+    "TIGER_US_PHLX_SOX": "381180"
   },
   "parameters": {
     "volume_lookback_days": 20,
