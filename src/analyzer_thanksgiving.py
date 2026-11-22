@@ -28,7 +28,7 @@ def get_thanksgiving_dates(years) -> pd.DatetimeIndex:
     tg_dates = []
     for y in sorted(set(int(y) for y in years)):
         nov_days = pd.date_range(start=f"{y}-11-01", end=f"{y}-11-30", freq="D")
-        thursdays = nov_days[nov_days.weekday == 3]
+        thursdays = nov_days[nov_days.dayofweek == 3]
         if len(thursdays) >= 4:
             tg_dates.append(thursdays[3])
     return pd.DatetimeIndex(tg_dates)
@@ -37,7 +37,7 @@ def get_thanksgiving_dates(years) -> pd.DatetimeIndex:
 def analyze_thanksgiving_anomaly(sp500_df: pd.DataFrame, lookback_days: int = 20) -> dict:
     """
     [가설 2] 추수감사절 주간(월~금) 및 블랙프라이데이의 거래량 급감(-30~40%)
-    및 수익률/변동성 계절성 통계 검증[cite: 1]
+    및 수익률/변동성 계절성 통계 검증
     """
     if sp500_df is None or sp500_df.empty:
         return _empty_thanksgiving_result(lookback_days)
@@ -64,8 +64,8 @@ def analyze_thanksgiving_anomaly(sp500_df: pd.DataFrame, lookback_days: int = 20
     bf_friday_mask = pd.Series(False, index=df.index)
 
     for tg in tg_dates:
-        week_start = tg - pd.Timedelta(days=3)  # 월요일
-        week_end = tg + pd.Timedelta(days=1)    # 금요일(블랙프라이데이)
+        week_start = tg - pd.Timedelta(days=3)
+        week_end = tg + pd.Timedelta(days=1)
         tg_week_mask |= (df.index >= week_start) & (df.index <= week_end)
         bf_friday_mask |= (df.index == week_end)
 
