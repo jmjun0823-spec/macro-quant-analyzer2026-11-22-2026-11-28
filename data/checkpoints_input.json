@@ -1,0 +1,25 @@
+{
+  "us_macro_1125": {
+    "core_pce_mom_pct": null,
+    "gdp_q3_rev_saar_pct": null
+  },
+  "bok_mpb_1126": {
+    "base_rate_action": null,
+    "gdp_2027_forecast_revised_down": null,
+    "cpi_2027_forecast_revised_down": null,
+    "forward_guidance_tone": null,
+    "ktb_3y_10y_spread_bp_change": null
+  },
+  "bfcm_and_trade": {
+    "nrf_adobe_growth_vs_forecast": null,
+    "kr_export_nov_1_20_yoy_pct": null,
+    "semi_export_trend": null
+  },
+  "flows_and_etf_lp": {
+    "foreign_k200_futures_net_buy": null,
+    "inst_book_closing_flow": null,
+    "dividend_arb_flow": null,
+    "us_etf_max_spread_pct": null,
+    "us_etf_max_disparity_pct": null
+  }
+}
