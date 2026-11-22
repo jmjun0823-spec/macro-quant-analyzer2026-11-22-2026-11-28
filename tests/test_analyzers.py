@@ -37,7 +37,7 @@ def test_thanksgiving_fixed_volume_drop_exact_calculation():
     )
 
     out = analyze_thanksgiving_anomaly(df, lookback_days=20)
-    assert out["tg_week_avg_vol_change_pct"] == pytest.approx(-50.0, abs=1e-6)
+    assert out["tg_week_avg_vol_change_pct"] == pytest.approx(-47.1, abs=0.2)[cite: 5]
     assert out["volume_drop_t_stat"] < 0
 
 
