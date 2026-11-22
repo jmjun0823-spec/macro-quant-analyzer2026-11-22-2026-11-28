@@ -27,11 +27,7 @@ def _window_return(series: pd.Series, year: int, start_mmdd: str = "11-20", end_
 
 
 def derive_all_report_items(global_data: dict, krx_etf_data: pd.DataFrame, params: dict) -> dict:
-    """
-    리포트 본문의 주요 섹터·매크로·수급·체크포인트 항목을 빠짐없이 구조화해 도출합니다.
-    공개 시계열로 계산 가능한 항목은 수치를 산출하고, 향후 발표/외부 원장 항목은
-    상태와 확인 기준을 명시합니다.
-    """
+    """리포트 본문의 매크로·소비/물류·연말 섹터·외국인 프록시 및 체크포인트 항목 도출"""
     ann = float(params.get("trading_days_per_year", 252))
     start_mmdd = params.get("year_end_start_mmdd", "11-20")
     end_mmdd = params.get("year_end_end_mmdd", "12-26")
@@ -48,7 +44,6 @@ def derive_all_report_items(global_data: dict, krx_etf_data: pd.DataFrame, param
     tlt_ret = global_data.get("TLT", pd.DataFrame()).get("Return", pd.Series(dtype=float))
     hyg_ret = global_data.get("HYG", pd.DataFrame()).get("Return", pd.Series(dtype=float))
 
-    # 1. 한·미 통화정책 / 금리 / 달러 / 환율 민감도 항목
     policy_rates_fx = {
         "us10y_to_nasdaq": _pair_stats(nasdaq_ret, us10y_diff),
         "us10y_to_sox": _pair_stats(sox_ret, us10y_diff),
@@ -58,7 +53,6 @@ def derive_all_report_items(global_data: dict, krx_etf_data: pd.DataFrame, param
         "hyg_credit_proxy_ann_ret_pct": round(float(hyg_ret.dropna().mean() * ann * 100), 2) if not hyg_ret.dropna().empty else None,
     }
 
-    # 2. BFCM 소비 / 결제 / 물류 프록시 (XRT 소매 ETF, IYT 운송·물류 ETF)
     bfcm_consumption_proxies = {
         "retail_xrt_ann_ret_pct": round(float(xrt_ret.dropna().mean() * ann * 100), 2) if not xrt_ret.dropna().empty else None,
         "transport_logistics_iyt_ann_ret_pct": round(float(iyt_ret.dropna().mean() * ann * 100), 2) if not iyt_ret.dropna().empty else None,
@@ -68,7 +62,6 @@ def derive_all_report_items(global_data: dict, krx_etf_data: pd.DataFrame, param
         bfcm_rets = [r for y in years if (r := _window_return(xrt_ret.add(1.0).cumprod(), y, "11-22", "12-05")) is not None]
         bfcm_consumption_proxies["xrt_bfcm_window_avg_ret_pct"] = round(float(sum(bfcm_rets) / len(bfcm_rets) * 100), 2) if bfcm_rets else None
 
-    # 3. 연말 수급 구조 변화 (대형/고배당/반도체 vs 코스닥150)
     year_end_sectors = {}
     if krx_etf_data is not None and not krx_etf_data.empty:
         for col in krx_etf_data.columns:
@@ -80,13 +73,11 @@ def derive_all_report_items(global_data: dict, krx_etf_data: pd.DataFrame, param
                     vals.append(r)
             year_end_sectors[f"{col}_window_avg_ret_pct"] = round(float(sum(vals) / len(vals) * 100), 2) if vals else None
 
-    # 4. 외국인 수급 / 환율 프록시 (EWY, SOX, KOSPI)
     foreign_fx_proxies = {
         "ewy_to_kospi": _pair_stats(kospi_ret, ewy_ret),
         "sox_to_kospi": _pair_stats(kospi_ret, sox_ret),
     }
 
-    # 5. 별도 발표/외부 원장 확인 필요 체크포인트
     checkpoints_and_pending_items = [
         {
             "item": "미국 3분기 GDP 수정치 및 10월 개인소비지출(PCE) 물가(11/25)",
