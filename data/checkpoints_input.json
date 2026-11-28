@@ -1,25 +1,34 @@
 {
-  "us_macro_1125": {
-    "core_pce_mom_pct": null,
-    "gdp_q3_rev_saar_pct": null
-  },
-  "bok_mpb_1126": {
-    "base_rate_action": null,
-    "gdp_2027_forecast_revised_down": null,
-    "cpi_2027_forecast_revised_down": null,
-    "forward_guidance_tone": null,
-    "ktb_3y_10y_spread_bp_change": null
-  },
-  "bfcm_and_trade": {
-    "nrf_adobe_growth_vs_forecast": null,
-    "kr_export_nov_1_20_yoy_pct": null,
-    "semi_export_trend": null
-  },
-  "flows_and_etf_lp": {
-    "foreign_k200_futures_net_buy": null,
-    "inst_book_closing_flow": null,
-    "dividend_arb_flow": null,
-    "us_etf_max_spread_pct": null,
-    "us_etf_max_disparity_pct": null
+  "checkpoint_window": "2026-11-25..2026-11-27",
+  "status": "ready_for_update",
+  "items": {
+    "us_gdp_and_core_pce": {
+      "release_date": "2026-11-25",
+      "q3_gdp_revision_pct": null,
+      "core_pce_mom_pct": null,
+      "signal_rule": "core_pce_mom_pct <= 0.2 -> dovish_stable; >= 0.3 -> hawkish_fx_usd_pressure"
+    },
+    "bok_mpb_and_rates": {
+      "release_date": "2026-11-26",
+      "base_rate_pct": null,
+      "growth_2027_downgraded": null,
+      "inflation_2027_downgraded": null,
+      "forward_guidance_3m": null,
+      "ktb_3y_10y_spread_bp": null
+    },
+    "bfcm_and_kr_trade": {
+      "release_date": "2026-11-25..2026-11-27",
+      "nrf_adobe_bfcm_online_sales_growth_pct": null,
+      "kr_nov_1_20_semi_export_growth_pct": null,
+      "kr_nov_1_20_trade_balance_usd_b": null
+    },
+    "flows_and_etf_dislocation": {
+      "release_date": "2026-11-25..2026-11-27",
+      "institutional_book_closing_flow_krw_b": null,
+      "dividend_arbitrage_flow_krw_b": null,
+      "foreign_kospi200_futures_cum_net_buy_krw_b": null,
+      "us_holiday_early_close_etf_spread_pct": null,
+      "us_holiday_early_close_etf_premium_discount_pct": null
+    }
   }
 }
