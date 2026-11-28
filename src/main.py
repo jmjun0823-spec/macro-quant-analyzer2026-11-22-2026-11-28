@@ -51,26 +51,73 @@ def _load_config_and_data() -> Dict[str, Any]:
         "config_dir": CONFIG_DIR,
     }
 
-    for mod_name, fn_names, ctx_key in [
-        ("src.config_loader", ["load_config", "get_config", "read_config"], "config"),
-        ("src.data_loader", ["load_all_data", "load_market_data", "load_data", "fetch_all_data"], "data"),
-    ]:
-        try:
-            mod = importlib.import_module(mod_name)
-            for name in fn_names:
-                fn = getattr(mod, name, None)
-                if callable(fn):
-                    val = _call_with_supported_kwargs(fn, context)
-                    if val is not None:
-                        context[ctx_key] = val
-                    break
-        except Exception as exc:
-            print(f"[Warn] {mod_name}: {exc}")
+    try:
+        cfg_mod = importlib.import_module("src.config_loader")
+        for fn_name in ["load_config", "get_config", "read_config"]:
+            fn = getattr(cfg_mod, fn_name, None)
+            if callable(fn):
+                cfg = _call_with_supported_kwargs(fn, context)
+                if cfg is not None:
+                    context["config"] = cfg
+                break
+    except Exception as exc:
+        print(f"[Warn] config_loader skipped: {exc}")
+
+    try:
+        dl_mod = importlib.import_module("src.data_loader")
+        for fn_name in ["load_all_data", "load_market_data", "load_data", "fetch_all_data"]:
+            fn = getattr(dl_mod, fn_name, None)
+            if callable(fn):
+                data = _call_with_supported_kwargs(fn, context)
+                if data is not None:
+                    context["data"] = data
+                break
+    except Exception as exc:
+        print(f"[Warn] data_loader skipped: {exc}")
 
     return context
 
 
-def _run_module_best_dict(mod: Any, preferred_names: List[str], context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _build_analyzer_kwargs(context: Dict[str, Any]) -> Dict[str, Any]:
+    raw_cfg = context.get("config")
+    params = raw_cfg if isinstance(raw_cfg, dict) else {}
+
+    raw_data = context.get("data")
+    if isinstance(raw_data, dict):
+        global_data = (
+            raw_data.get("global_data")
+            if isinstance(raw_data.get("global_data"), dict)
+            else raw_data
+        )
+        krx_etf_data = raw_data.get("krx_etf_data")
+    else:
+        global_data = {}
+        krx_etf_data = None
+
+    if krx_etf_data is None:
+        try:
+            import pandas as pd
+
+            krx_etf_data = pd.DataFrame()
+        except Exception:
+            krx_etf_data = None
+
+    kwargs = dict(context)
+    kwargs.update(
+        {
+            "params": params,
+            "global_data": global_data,
+            "krx_etf_data": krx_etf_data,
+        }
+    )
+    return kwargs
+
+
+def _run_module_best_dict(
+    mod: Any,
+    preferred_names: List[str],
+    context: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
     seen_ids = set()
     ordered_fns: List[Callable[..., Any]] = []
 
@@ -109,7 +156,8 @@ def _run_module_best_dict(mod: Any, preferred_names: List[str], context: Dict[st
 
 
 def run_all_analyzers() -> Dict[str, Any]:
-    context = _load_config_and_data()
+    raw_context = _load_config_and_data()
+    context = _build_analyzer_kwargs(raw_context)
     aggregated: Dict[str, Any] = {}
 
     specs = [
