@@ -239,6 +239,24 @@ def evaluate_checkpoints(input_path: Path = Path("data/checkpoints_input.json"))
     }
 
 
+def format_checkpoint_evaluation_md(checkpoint_eval: Dict[str, Any]) -> List[str]:
+    status = checkpoint_eval.get("status", "pending_values")
+    lines = [f"## 6. 발표·원장 입력값 자동 판정 ({status})"]
+    evaluations = checkpoint_eval.get("evaluations", [])
+    if not evaluations:
+        lines.append(
+            "- `data/checkpoints_input.json`에 11/25~27 발표 및 원장 수치를 입력 후 재실행하면 자동 판정이 출력됩니다."
+        )
+        return lines
+
+    for ev in evaluations:
+        ckpt = ev.get("checkpoint", "unknown")
+        signal = ev.get("signal", "PENDING")
+        reason = ev.get("reason", "")
+        lines.append(f"- **{ckpt}** (`{signal}`): {reason}")
+    return lines
+
+
 if __name__ == "__main__":
     result = evaluate_checkpoints()
     print(json.dumps(result, indent=2, ensure_ascii=False))
