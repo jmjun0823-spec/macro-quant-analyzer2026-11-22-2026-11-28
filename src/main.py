@@ -1,9 +1,17 @@
 import importlib
+import inspect
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from src.checkpoint_evaluator import evaluate_checkpoints, format_checkpoint_evaluation_md
+from src.visualization import generate_charts
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = ROOT_DIR / "output"
+DATA_DIR = ROOT_DIR / "data"
+CONFIG_DIR = ROOT_DIR / "config"
 
 
 def _format_num(val: Any, decimals: int = 2, suffix: str = "") -> str:
@@ -15,28 +23,117 @@ def _format_num(val: Any, decimals: int = 2, suffix: str = "") -> str:
         return str(val)
 
 
-def _run_analyzers_if_available() -> Dict[str, Any]:
-    results: Dict[str, Any] = {}
-    candidate_modules = [
-        "src.analyzers",
-        "src.macro_analyzer",
-        "src.thanksgiving_analyzer",
-        "src.yearend_analyzer",
-        "src.risk_analyzer",
-    ]
-    for mod_name in candidate_modules:
-        try:
-            mod = importlib.import_module(mod_name)
-        except ModuleNotFoundError:
-            continue
-        for fn_name in ["run_all", "run_analysis", "analyze"]:
-            fn = getattr(mod, fn_name, None)
+def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[str, Any]) -> Any:
+    sig = inspect.signature(fn)
+    params = sig.parameters
+    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    if accepts_var_kw:
+        return fn(**available_kwargs)
+    filtered = {k: v for k, v in available_kwargs.items() if k in params}
+    return fn(**filtered)
+
+
+def _load_config_and_data() -> Dict[str, Any]:
+    context: Dict[str, Any] = {
+        "root_dir": ROOT_DIR,
+        "output_dir": OUTPUT_DIR,
+        "data_dir": DATA_DIR,
+        "config_dir": CONFIG_DIR,
+    }
+
+    try:
+        cfg_mod = importlib.import_module("src.config_loader")
+        for fn_name in ["load_config", "get_config", "read_config"]:
+            fn = getattr(cfg_mod, fn_name, None)
             if callable(fn):
-                out = fn()
-                if isinstance(out, dict):
-                    results.update(out)
+                cfg = _call_with_supported_kwargs(fn, context)
+                if cfg is not None:
+                    context["config"] = cfg
                 break
-    return results
+    except Exception as exc:
+        print(f"[Warn] config_loader skipped: {exc}")
+
+    try:
+        dl_mod = importlib.import_module("src.data_loader")
+        for fn_name in ["load_all_data", "load_market_data", "load_data", "fetch_all_data"]:
+            fn = getattr(dl_mod, fn_name, None)
+            if callable(fn):
+                data = _call_with_supported_kwargs(fn, context)
+                if data is not None:
+                    context["data"] = data
+                break
+    except Exception as exc:
+        print(f"[Warn] data_loader skipped: {exc}")
+
+    return context
+
+
+def _run_analyzer_module(
+    mod_name: str,
+    candidate_fns: List[str],
+    context: Dict[str, Any],
+    result_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    try:
+        mod = importlib.import_module(mod_name)
+    except Exception as exc:
+        print(f"[Warn] {mod_name} import skipped: {exc}")
+        return {}
+
+    for fn_name in candidate_fns:
+        fn = getattr(mod, fn_name, None)
+        if callable(fn):
+            try:
+                out = _call_with_supported_kwargs(fn, context)
+                if isinstance(out, dict):
+                    if result_key and result_key not in out:
+                        return {result_key: out}
+                    return out
+            except Exception as exc:
+                print(f"[Warn] {mod_name}.{fn_name} failed: {exc}")
+            break
+    return {}
+
+
+def run_all_analyzers() -> Dict[str, Any]:
+    context = _load_config_and_data()
+    aggregated: Dict[str, Any] = {}
+
+    specs = [
+        (
+            "src.analyzer_macro_fx",
+            ["analyze_macro_and_fx_sensitivity", "analyze_macro_fx", "run_analysis", "analyze"],
+            "1_Macro_Rates_and_FX_Sensitivity",
+        ),
+        (
+            "src.analyzer_thanksgiving",
+            ["analyze_thanksgiving_anomaly", "analyze_thanksgiving", "run_analysis", "analyze"],
+            "2_Thanksgiving_Calendar_Anomaly",
+        ),
+        (
+            "src.analyzer_year_end",
+            ["analyze_year_end_rotation", "analyze_year_end", "run_analysis", "analyze"],
+            "3_YearEnd_BookClosing_and_Dividend_Rotation",
+        ),
+        (
+            "src.quant_allocation",
+            ["analyze_quant_risk_and_allocation", "run_quant_allocation", "run_analysis", "analyze"],
+            "4_Quant_Risk_and_Allocation",
+        ),
+        (
+            "src.analyzer_all_items",
+            ["derive_all_report_items", "analyze_all_items", "run_analysis", "analyze"],
+            "5_All_Report_Items_and_Checkpoints",
+        ),
+    ]
+
+    for mod_name, fn_names, key in specs:
+        res = _run_analyzer_module(mod_name, fn_names, context, result_key=key)
+        if res:
+            aggregated.update(res)
+            context["results"] = aggregated
+
+    return aggregated
 
 
 def build_report_markdown(results: Dict[str, Any]) -> str:
@@ -92,36 +189,49 @@ def build_report_markdown(results: Dict[str, Any]) -> str:
 
 def save_outputs(
     results: Dict[str, Any],
-    output_dir: Path = Path("output"),
-    report_path: Path = Path("verification_report.md"),
-    results_path: Path = Path("verification_results.json"),
-) -> None:
+    output_dir: Path = OUTPUT_DIR,
+) -> Dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    results["6_Checkpoint_Event_Evaluation"] = evaluate_checkpoints()
 
-    results_path.write_text(
-        json.dumps(results, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    report_path.write_text(
-        build_report_markdown(results),
-        encoding="utf-8",
-    )
+    tg_results = results.get("2_Thanksgiving_Calendar_Anomaly", {})
+    ye_results = results.get("3_YearEnd_BookClosing_and_Dividend_Rotation", {})
+    chart_paths = generate_charts(tg_results, ye_results, output_dir)
+    if chart_paths:
+        results["generated_charts"] = [str(p) for p in chart_paths]
+
+    results["6_Checkpoint_Event_Evaluation"] = evaluate_checkpoints(DATA_DIR / "checkpoints_input.json")
+
+    report_md = build_report_markdown(results)
+    results_json_str = json.dumps(results, indent=2, ensure_ascii=False)
+
+    # CI/아티팩트 경로(output/)와 루트 경로 모두 동기화 저장
+    (output_dir / "verification_results.json").write_text(results_json_str, encoding="utf-8")
+    (output_dir / "verification_report.md").write_text(report_md, encoding="utf-8")
+    (ROOT_DIR / "verification_report.md").write_text(report_md, encoding="utf-8")
+
+    return results
 
 
 def main() -> None:
-    existing_results_path = Path("verification_results.json")
-    base_results: Dict[str, Any] = {}
-    if existing_results_path.exists():
-        loaded = json.loads(existing_results_path.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            base_results = loaded
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    computed = _run_analyzers_if_available()
+    base_results: Dict[str, Any] = {}
+    for candidate in [OUTPUT_DIR / "verification_results.json", ROOT_DIR / "verification_results.json"]:
+        if candidate.exists():
+            try:
+                loaded = json.loads(candidate.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    base_results = loaded
+                    break
+            except json.JSONDecodeError:
+                pass
+
+    computed = run_all_analyzers()
     if computed:
         base_results.update(computed)
 
-    save_outputs(base_results)
+    save_outputs(base_results, output_dir=OUTPUT_DIR)
+    print(f"[Done] Saved outputs to {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":
