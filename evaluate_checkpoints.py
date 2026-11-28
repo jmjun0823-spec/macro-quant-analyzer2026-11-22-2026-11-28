@@ -23,7 +23,7 @@ def evaluate_checkpoint_item(key: str, data: Dict[str, Any]) -> Dict[str, Any]:
             desc = f"Core PCE MoM {pce}% (>= +0.3%): 매파·달러/환율 상방 압력"
         else:
             sig = "NEUTRAL"
-            desc = f"Core PCE MoM {pce}% (중간 구간), Q3 GDP 수정치 {gdp}%"
+            desc = f"Core PCE MoM {pce}% (중간 구간)"
         if gdp is not None:
             desc += f" / Q3 GDP 수정치 {gdp}%"
         return {"key": key, "status": "evaluated", "signal": sig, "summary": desc}
@@ -91,8 +91,8 @@ def evaluate_checkpoint_item(key: str, data: Dict[str, Any]) -> Dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate 11/25~27 checkpoints into results & report")
     parser.add_argument("--input", type=Path, default=Path("data/checkpoints_input.json"))
-    parser.add_argument("--results", type=Path, default=Path("verification_results.json"))
-    parser.add_argument("--report", type=Path, default=Path("verification_report.md"))
+    parser.add_argument("--results", type=Path, default=Path("verification_results_3.json"))
+    parser.add_argument("--report", type=Path, default=Path("verification_report_3.md"))
     args = parser.parse_args()
 
     input_obj = json.loads(args.input.read_text(encoding="utf-8"))
