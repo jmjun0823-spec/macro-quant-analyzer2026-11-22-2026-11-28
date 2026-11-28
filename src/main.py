@@ -60,6 +60,7 @@ def _build_context() -> Dict[str, Any]:
         "params": cfg,
         "global_data": global_data,
         "data_store": global_data,
+        "market_data": global_data,
         "krx_etf_data": krx_etf_data,
         "etf_df": krx_etf_data,
         "etf_data": krx_etf_data,
@@ -67,7 +68,6 @@ def _build_context() -> Dict[str, Any]:
             "global_data": global_data,
             "krx_etf_data": krx_etf_data,
         },
-        # 개별 DataFrame 인자 매핑 (analyzer_year_end, analyzer_macro_fx, analyzer_thanksgiving, quant_allocation 대응)
         "kospi_df": _df("KOSPI"),
         "kosdaq_df": _df("KOSDAQ"),
         "sp500_df": _df("SP500"),
@@ -81,7 +81,6 @@ def _build_context() -> Dict[str, Any]:
         "hyg_df": _df("HYG"),
         "xrt_df": _df("XRT"),
         "iyt_df": _df("IYT"),
-        # config 내 주요 파라미터 인자 매핑
         "start_mmdd": cfg.get("year_end_start_mmdd", "11-20"),
         "end_mmdd": cfg.get("year_end_end_mmdd", "12-26"),
         "lookback_days": cfg.get("thanksgiving_lookback_days", 20),
@@ -107,8 +106,9 @@ def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[s
         "cfg": ["cfg", "config", "params"],
         "config": ["config", "cfg", "params"],
         "params": ["params", "cfg", "config"],
-        "global_data": ["global_data", "data_store", "data"],
-        "data_store": ["data_store", "global_data", "data"],
+        "global_data": ["global_data", "data_store", "market_data", "data"],
+        "data_store": ["data_store", "global_data", "market_data", "data"],
+        "market_data": ["market_data", "global_data", "data_store", "data"],
         "krx_etf_data": ["krx_etf_data", "etf_df", "etf_data"],
         "etf_df": ["etf_df", "krx_etf_data", "etf_data"],
         "etf_data": ["etf_data", "krx_etf_data", "etf_df"],
@@ -140,14 +140,30 @@ def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[s
     return fn(**call_kwargs)
 
 
-def _is_empty_result(out: Dict[str, Any]) -> bool:
+def _has_meaningful_values(out: Dict[str, Any]) -> bool:
     if not out:
-        return True
-    if out.get("obs_count") == 0 and all(
-        v is None for k, v in out.items() if k not in {"analysis_period", "obs_count", "fx_peak_reversal_events"}
-    ):
-        return True
-    return False
+        return False
+
+    def _walk(obj: Any) -> bool:
+        if obj is None:
+            return False
+        if isinstance(obj, bool):
+            return True
+        if isinstance(obj, (int, float)):
+            return obj != 0
+        if isinstance(obj, str):
+            return obj.strip() != "" and obj.lower() != "none"
+        if isinstance(obj, (list, tuple)):
+            return any(_walk(x) for x in obj)
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in {"analysis_period", "obs_count", "obs", "fx_peak_reversal_events", "window", "index_period", "etf_period"}:
+                    continue
+                if _walk(v):
+                    return True
+        return False
+
+    return _walk(out)
 
 
 def _run_module_best_dict(
@@ -172,16 +188,20 @@ def _run_module_best_dict(
             seen_ids.add(id(fn))
             ordered_fns.append(fn)
 
+    fallback_dict: Optional[Dict[str, Any]] = None
     for fn in ordered_fns:
         try:
             out = _call_with_supported_kwargs(fn, context)
-            if isinstance(out, dict) and not _is_empty_result(out):
-                print(f"[Analyzer] {mod.__name__}.{fn.__name__} -> keys={list(out.keys())}")
-                return out
+            if isinstance(out, dict) and out:
+                if _has_meaningful_values(out):
+                    print(f"[Analyzer] {mod.__name__}.{fn.__name__} -> keys={list(out.keys())}")
+                    return out
+                if fallback_dict is None:
+                    fallback_dict = out
         except Exception as exc:
-            print(f"[Warn] {mod.__name__}.{fn.__name__} skipped: {exc}")
+            print(f"[Warn] {mod.__name__}.{fn.__name__}: {exc}")
 
-    return None
+    return fallback_dict
 
 
 def _normalize_all_items_bucket(aggregated: Dict[str, Any], out: Dict[str, Any]) -> None:
@@ -210,27 +230,58 @@ def run_all_analyzers() -> Dict[str, Any]:
     specs = [
         (
             "src.analyzer_macro_fx",
-            ["analyze_macro_and_fx_sensitivity", "analyze_macro_fx", "run_macro_fx", "run_analysis", "analyze"],
+            [
+                "analyze_macro_and_fx_sensitivity",
+                "analyze_macro_fx",
+                "analyze_macro_rates_fx",
+                "run_macro_fx",
+                "run_analysis",
+                "analyze",
+            ],
             "1_Macro_Rates_and_FX_Sensitivity",
         ),
         (
             "src.analyzer_thanksgiving",
-            ["analyze_thanksgiving_anomaly", "analyze_thanksgiving", "run_thanksgiving", "run_analysis", "analyze"],
+            [
+                "analyze_thanksgiving_anomaly",
+                "analyze_thanksgiving",
+                "run_thanksgiving",
+                "run_analysis",
+                "analyze",
+            ],
             "2_Thanksgiving_Calendar_Anomaly",
         ),
         (
             "src.analyzer_year_end",
-            ["analyze_year_end_rotation", "analyze_year_end", "run_year_end", "run_analysis", "analyze"],
+            [
+                "analyze_year_end_rotation",
+                "analyze_year_end",
+                "run_year_end",
+                "run_analysis",
+                "analyze",
+            ],
             "3_YearEnd_BookClosing_and_Dividend_Rotation",
         ),
         (
             "src.quant_allocation",
-            ["analyze_quant_risk_and_allocation", "run_quant_allocation", "run_analysis", "analyze"],
+            [
+                "analyze_quant_risk_and_allocation",
+                "simulate_quant_allocation",
+                "run_quant_allocation",
+                "run_analysis",
+                "analyze",
+            ],
             "4_Quant_Risk_and_Allocation",
         ),
         (
             "src.analyzer_all_items",
-            ["derive_all_report_items", "analyze_all_items", "run_all_items", "run_analysis", "analyze"],
+            [
+                "derive_all_report_items",
+                "analyze_all_items",
+                "run_all_items",
+                "run_analysis",
+                "analyze",
+            ],
             "5_All_Report_Items_and_Checkpoints",
         ),
     ]
