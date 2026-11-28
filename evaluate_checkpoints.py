@@ -5,6 +5,14 @@ from typing import Any, Dict, List
 
 
 def evaluate_checkpoint_item(key: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        return {
+            "key": key,
+            "status": "pending",
+            "signal": "PENDING",
+            "summary": "입력 데이터 형식이 올바르지 않음",
+        }
+
     if key == "us_gdp_and_core_pce":
         pce = data.get("core_pce_mom_pct")
         gdp = data.get("q3_gdp_revision_pct")
@@ -59,7 +67,7 @@ def evaluate_checkpoint_item(key: str, data: Dict[str, Any]) -> Dict[str, Any]:
                 "signal": "PENDING",
                 "summary": "NRF·Adobe BFCM 온라인 소비 및 한국 11/1~20 수출입 잠정치 미입력",
             }
-        strong = ((bfcm is not None and bfcm > 0) and (semi is not None and semi > 0))
+        strong = (bfcm is not None and bfcm > 0) and (semi is not None and semi > 0)
         sig = "CONSUMPTION_SEMI_SUPPORTIVE" if strong else "MIXED_MOMENTUM"
         desc = f"BFCM 온라인 성장 {bfcm}%, 11/1~20 반도체 수출 {semi}%, 무역수지 ${balance}B"
         return {"key": key, "status": "evaluated", "signal": sig, "summary": desc}
@@ -88,25 +96,28 @@ def evaluate_checkpoint_item(key: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return {"key": key, "status": "pending", "signal": "PENDING", "summary": "미정의 항목"}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate 11/25~27 checkpoints into results & report")
-    parser.add_argument("--input", type=Path, default=Path("data/checkpoints_input.json"))
-    parser.add_argument("--results", type=Path, default=Path("verification_results_3.json"))
-    parser.add_argument("--report", type=Path, default=Path("verification_report_3.md"))
-    args = parser.parse_args()
-
-    input_obj = json.loads(args.input.read_text(encoding="utf-8"))
-    items = input_obj.get("items", {})
-    evaluations: List[Dict[str, Any]] = [evaluate_checkpoint_item(k, v) for k, v in items.items()]
+def run_checkpoint_evaluation(
+    input_path: Path = Path("data/checkpoints_input.json"),
+    results_path: Path = Path("output/verification_results.json"),
+    report_path: Path = Path("output/verification_report.md"),
+) -> Dict[str, Any]:
+    input_obj = json.loads(input_path.read_text(encoding="utf-8"))
+    items: Dict[str, Any] = input_obj.get("items", {})
+    evaluations: List[Dict[str, Any]] = [
+        evaluate_checkpoint_item(k, v) for k, v in items.items()
+    ]
     all_done = len(evaluations) > 0 and all(e["status"] == "evaluated" for e in evaluations)
 
-    results_obj = json.loads(args.results.read_text(encoding="utf-8"))
+    results_obj = json.loads(results_path.read_text(encoding="utf-8"))
     results_obj["6_Checkpoint_Event_Evaluation"] = {
         "status": "evaluated" if all_done else "partial_or_pending",
         "checkpoint_window": input_obj.get("checkpoint_window", "2026-11-25..2026-11-27"),
         "evaluations": evaluations,
     }
-    args.results.write_text(json.dumps(results_obj, indent=2, ensure_ascii=False), encoding="utf-8")
+    results_path.write_text(
+        json.dumps(results_obj, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     section_lines = [
         "## 6. 발표·원장 입력값 자동 판정",
@@ -115,16 +126,49 @@ def main() -> None:
     for ev in evaluations:
         section_lines.append(f"- **{ev['key']}** (`{ev['signal']}`): {ev['summary']}")
 
-    report_str = args.report.read_text(encoding="utf-8")
+    report_str = report_path.read_text(encoding="utf-8")
     anchor = "## 6. 발표·원장 입력값 자동 판정"
     if anchor in report_str:
         head = report_str.split(anchor)[0].rstrip()
         updated_report = head + "\n\n" + "\n".join(section_lines) + "\n"
     else:
         updated_report = report_str.rstrip() + "\n\n" + "\n".join(section_lines) + "\n"
-    args.report.write_text(updated_report, encoding="utf-8")
+    report_path.write_text(updated_report, encoding="utf-8")
 
-    print(json.dumps(results_obj["6_Checkpoint_Event_Evaluation"], indent=2, ensure_ascii=False))
+    return results_obj["6_Checkpoint_Event_Evaluation"]
+
+
+def finalize_macro_report(
+    output_dir: Path = Path("output"),
+    checkpoint_input: Path = Path("data/checkpoints_input.json"),
+) -> None:
+    results_path = output_dir / "verification_results.json"
+    report_path = output_dir / "verification_report.md"
+
+    if checkpoint_input.exists() and results_path.exists() and report_path.exists():
+        summary = run_checkpoint_evaluation(
+            input_path=checkpoint_input,
+            results_path=results_path,
+            report_path=report_path,
+        )
+        print(f"[Checkpoint Evaluation] status={summary.get('status')}")
+    else:
+        print("[Checkpoint Evaluation] skipped (missing input or base report)")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Evaluate 11/25~27 checkpoints into results & report")
+    parser.add_argument("--input", type=Path, default=Path("data/checkpoints_input.json"))
+    parser.add_argument("--results", type=Path, default=Path("output/verification_results.json"))
+    parser.add_argument("--report", type=Path, default=Path("output/verification_report.md"))
+    args = parser.parse_args()
+
+    out = run_checkpoint_evaluation(
+        input_path=args.input,
+        results_path=args.results,
+        report_path=args.report,
+    )
+    print(json.dumps(out, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
