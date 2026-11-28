@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import pandas as pd
-
 from src.checkpoint_evaluator import evaluate_checkpoints, format_checkpoint_evaluation_md
 from src.config_loader import load_config
 from src.data_loader import fetch_global_data, fetch_krx_etf_data
@@ -103,6 +101,25 @@ def _run_module_best_dict(
     return None
 
 
+def _normalize_all_items_bucket(aggregated: Dict[str, Any], out: Dict[str, Any]) -> None:
+    sub_keys = [
+        "1_policy_rates_fx",
+        "2_bfcm_consumption_proxies",
+        "3_year_end_sectors",
+        "4_foreign_fx_proxies",
+        "5_checkpoints_and_pending_items",
+    ]
+    bucket = dict(aggregated.get("5_All_Report_Items_and_Checkpoints", {}))
+    if isinstance(out.get("5_All_Report_Items_and_Checkpoints"), dict):
+        bucket.update(out["5_All_Report_Items_and_Checkpoints"])
+    for sk in sub_keys:
+        if sk in out:
+            bucket[sk] = out[sk]
+            aggregated[sk] = out[sk]
+    if bucket:
+        aggregated["5_All_Report_Items_and_Checkpoints"] = bucket
+
+
 def run_all_analyzers() -> Dict[str, Any]:
     context = _load_context()
     aggregated: Dict[str, Any] = {}
@@ -143,14 +160,19 @@ def run_all_analyzers() -> Dict[str, Any]:
             continue
 
         out = _run_module_best_dict(mod, fn_names, context)
-        if out:
-            if key in out and isinstance(out[key], dict):
-                aggregated[key] = out[key]
-            elif any(k.startswith(("1_", "2_", "3_", "4_", "5_")) for k in out):
-                aggregated.update(out)
-            else:
-                aggregated[key] = out
-            context["results"] = aggregated
+        if not out:
+            continue
+
+        if key == "5_All_Report_Items_and_Checkpoints":
+            _normalize_all_items_bucket(aggregated, out)
+        elif key in out and isinstance(out[key], dict):
+            aggregated[key] = out[key]
+        elif any(k.startswith(("1_", "2_", "3_", "4_", "5_")) for k in out):
+            aggregated.update(out)
+        else:
+            aggregated[key] = out
+
+        context["results"] = aggregated
 
     return aggregated
 
@@ -177,6 +199,8 @@ def build_report_markdown(results: Dict[str, Any]) -> str:
     ye = results.get("3_YearEnd_BookClosing_and_Dividend_Rotation", {})
     risk = results.get("4_Quant_Risk_and_Allocation", {})
     ext = results.get("5_All_Report_Items_and_Checkpoints", {})
+    if not ext and "2_bfcm_consumption_proxies" in results:
+        ext = results
     ckpt_eval = results.get("6_Checkpoint_Event_Evaluation", {})
 
     bench = risk.get("benchmark_risk_70_30", {})
