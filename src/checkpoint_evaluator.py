@@ -164,6 +164,13 @@ def _eval_flows_etf(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _pick_key(items: Dict[str, Any], aliases: List[str], default_key: str) -> str:
+    for name in aliases:
+        if name in items and isinstance(items[name], dict):
+            return name
+    return default_key
+
+
 def evaluate_checkpoints(input_path: Path = Path("data/checkpoints_input.json")) -> Dict[str, Any]:
     payload = load_checkpoints_payload(Path(input_path))
     if not payload:
@@ -173,27 +180,17 @@ def evaluate_checkpoints(input_path: Path = Path("data/checkpoints_input.json"))
     if not items:
         return _default_pending_result("체크포인트 입력 항목이 비어 있음")
 
-    evaluations: List[Dict[str, Any]] = []
-    for key, item_data in items.items():
-        if not isinstance(item_data, dict):
-            continue
-        if key in {"us_gdp_and_core_pce", "us_macro_1125"}:
-            evaluations.append(_eval_us_macro(key, item_data))
-        elif key in {"bok_mpb_and_rates", "bok_mpb_1126"}:
-            evaluations.append(_eval_bok_mpb(key, item_data))
-        elif key in {"bfcm_and_kr_trade", "bfcm_kr_trade"}:
-            evaluations.append(_eval_bfcm_trade(key, item_data))
-        elif key in {"flows_and_etf_dislocation", "flows_and_etf_lp"}:
-            evaluations.append(_eval_flows_etf(key, item_data))
-        else:
-            has_val = any(v is not None for v in item_data.values())
-            evaluations.append({
-                "checkpoint": key,
-                "status": "evaluated" if has_val else "pending",
-                "signal": "EVALUATED" if has_val else "PENDING",
-                "value": item_data,
-                "reason": "입력값 반영 완료" if has_val else "입력값 대기 중",
-            })
+    us_key = _pick_key(items, ["us_gdp_and_core_pce", "us_macro_1125"], "us_macro_1125")
+    bok_key = _pick_key(items, ["bok_mpb_and_rates", "bok_mpb_1126"], "bok_mpb_1126")
+    bfcm_key = _pick_key(items, ["bfcm_and_kr_trade", "bfcm_kr_trade"], "bfcm_kr_trade")
+    flows_key = _pick_key(items, ["flows_and_etf_dislocation", "flows_and_etf_lp"], "flows_and_etf_lp")
+
+    evaluations: List[Dict[str, Any]] = [
+        _eval_us_macro(us_key, items.get(us_key, {})),
+        _eval_bok_mpb(bok_key, items.get(bok_key, {})),
+        _eval_bfcm_trade(bfcm_key, items.get(bfcm_key, {})),
+        _eval_flows_etf(flows_key, items.get(flows_key, {})),
+    ]
 
     evaluated_count = sum(1 for e in evaluations if e["status"] == "evaluated")
     if evaluated_count == 0:
