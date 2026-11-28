@@ -1,12 +1,11 @@
 {
   "checkpoint_window": "2026-11-25..2026-11-27",
-  "status": "ready_for_update",
+  "status": "ready_for_input",
   "items": {
     "us_gdp_and_core_pce": {
       "release_date": "2026-11-25",
       "q3_gdp_revision_pct": null,
-      "core_pce_mom_pct": null,
-      "signal_rule": "core_pce_mom_pct <= 0.2 -> dovish_stable; >= 0.3 -> hawkish_fx_usd_pressure"
+      "core_pce_mom_pct": null
     },
     "bok_mpb_and_rates": {
       "release_date": "2026-11-26",
