@@ -11,6 +11,24 @@ def _default_pending_result(reason: str = "입력값 대기 중") -> Dict[str, A
     }
 
 
+def _fmt_num(val: Any, suffix: str = "", prefix: str = "", default: str = "미집계") -> str:
+    if val is None:
+        return default
+    return f"{prefix}{val}{suffix}"
+
+
+def _fmt_downgrade(val: Any) -> str:
+    if val is None:
+        return "미확인"
+    return "하향" if bool(val) else "하향 없음"
+
+
+def _fmt_text(val: Any, default: str = "미입력") -> str:
+    if val is None or str(val).strip() == "":
+        return default
+    return str(val)
+
+
 def load_checkpoints_payload(input_path: Path) -> Dict[str, Any]:
     if not input_path.exists():
         return {}
@@ -43,21 +61,22 @@ def _eval_us_macro(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
             "status": "pending",
             "signal": "PENDING",
             "value": {"q3_gdp_revision_pct": gdp, "core_pce_mom_pct": core_pce},
-            "reason": "미국 3분기 GDP 수정치 및 10월 Core PCE MoM 미입력",
+            "reason": "미국 3분기 GDP 수정치 및 10월 Core PCE 전월비 미입력",
         }
 
+    pce_txt = _fmt_num(core_pce, "%")
     if core_pce is not None and float(core_pce) <= 0.2:
         signal = "DOVISH_STABLE"
-        reason = f"Core PCE MoM {core_pce}% (<= +0.2%): 완화·안정 시그널"
+        reason = f"Core PCE 전월비 {pce_txt} (+0.2% 이하): 완화·안정 시그널"
     elif core_pce is not None and float(core_pce) >= 0.3:
         signal = "HAWKISH_FX_USD_PRESSURE"
-        reason = f"Core PCE MoM {core_pce}% (>= +0.3%): 매파·달러/환율 상방 압력"
+        reason = f"Core PCE 전월비 {pce_txt} (+0.3% 이상): 매파·달러 및 환율 상방 압력"
     else:
         signal = "NEUTRAL"
-        reason = f"Core PCE MoM {core_pce}% (중간 구간)"
+        reason = f"Core PCE 전월비 {pce_txt} (중립 구간)"
 
     if gdp is not None:
-        reason += f" | Q3 GDP 수정치 {gdp}%"
+        reason += f" | 3분기 GDP 수정치 연율 {_fmt_num(gdp, '%', '+')}"
 
     return {
         "checkpoint": key,
@@ -83,13 +102,20 @@ def _eval_bok_mpb(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
             "status": "pending",
             "signal": "PENDING",
             "value": item,
-            "reason": "한은 금통위 기준금리·2027년 전망 하향 여부·포워드 가이던스·3Y-10Y 스프레드 미입력",
+            "reason": "한은 금통위 기준금리·2027년 전망·포워드 가이던스·국고채 3년-10년 스프레드 미입력",
         }
 
     signal = "GROWTH_INFLATION_DOWNGRADE_BIAS" if (bool(g_down) or bool(i_down)) else "HOLD_OR_HAWKISH_GUIDANCE"
+    guidance_map = {
+        "hawkish_6m_dot_mode_3.50pct": "매파적 가이던스(6개월 점도표 최빈값 3.50%)",
+    }
+    fwd_txt = guidance_map.get(str(fwd), _fmt_text(fwd))
+
     reason = (
-        f"기준금리 {base_rate}%, 2027년 성장/물가 하향({g_down}/{i_down}), "
-        f"3M 가이던스({fwd}), 국고채 3Y-10Y 스프레드 {spread}bp"
+        f"기준금리 {_fmt_num(base_rate, '%')}, "
+        f"2027년 성장률 전망 {_fmt_downgrade(g_down)}, "
+        f"2027년 물가 전망 {_fmt_downgrade(i_down)}, "
+        f"{fwd_txt}, 국고채 3년-10년 스프레드 {_fmt_num(spread, 'bp')}"
     )
     return {
         "checkpoint": key,
@@ -116,7 +142,11 @@ def _eval_bfcm_trade(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
 
     is_positive = (bfcm is not None and float(bfcm) > 0) or (semi is not None and float(semi) > 0)
     signal = "SUPPORTIVE_DEMAND_AND_EXPORTS" if is_positive else "CAUTIOUS_MOMENTUM"
-    reason = f"BFCM 온라인 성장 {bfcm}%, 11/1~20 반도체 수출 {semi}%, 무역수지 ${balance}B"
+    reason = (
+        f"BFCM 온라인 매출 {_fmt_num(bfcm, '%', '+')}, "
+        f"11/1~20 반도체 수출 {_fmt_num(semi, '%', '+')}, "
+        f"무역수지 {_fmt_num(balance, '억 달러 흑자', '$')}"
+    )
     return {
         "checkpoint": key,
         "status": "evaluated",
@@ -143,7 +173,7 @@ def _eval_flows_etf(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
             "status": "pending",
             "signal": "PENDING",
             "value": item,
-            "reason": "기관 북클로징·배당 차익거래·외인 선물·휴장/조기폐장 ETF 스프레드 및 괴리율 미입력",
+            "reason": "기관 북클로징·배당 차익거래·외국인 선물·미 휴장/조기폐장 ETF 스프레드 및 괴리율 미집계",
         }
 
     has_dislocation = (
@@ -152,8 +182,10 @@ def _eval_flows_etf(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
     )
     signal = "ETF_DISLOCATION_ALERT" if has_dislocation else "FLOW_AND_ETF_NORMAL"
     reason = (
-        f"기관 북클로징 {book}B, 배당차익 {div_arb}B, 외인선물 누적 {fut}B, "
-        f"ETF 스프레드 {spread_pct}% / 괴리율 {prem_pct}%"
+        f"기관 북클로징 {_fmt_num(book, '십억 원', '+')}, "
+        f"배당차익 {_fmt_num(div_arb, '십억 원')}, "
+        f"외국인 선물 누적 {_fmt_num(fut, '십억 원')}, "
+        f"ETF 호가 스프레드 {_fmt_num(spread_pct, '%')} / 괴리율 {_fmt_num(prem_pct, '%')}"
     )
     return {
         "checkpoint": key,
