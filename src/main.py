@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import pandas as pd
+
 from src.checkpoint_evaluator import evaluate_checkpoints, format_checkpoint_evaluation_md
 from src.config_loader import load_config
 from src.data_loader import fetch_global_data, fetch_krx_etf_data
@@ -41,8 +43,29 @@ def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[s
     accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
     if accepts_var_kw:
         return fn(**available_kwargs)
-    filtered = {k: v for k, v in available_kwargs.items() if k in params}
-    return fn(**filtered)
+
+    call_kwargs: Dict[str, Any] = {}
+    aliases: Dict[str, List[str]] = {
+        "cfg": ["cfg", "config", "params"],
+        "config": ["config", "cfg", "params"],
+        "params": ["params", "cfg", "config"],
+        "global_data": ["global_data", "data_store", "market_data", "data"],
+        "data_store": ["data_store", "global_data", "market_data", "data"],
+        "krx_etf_data": ["krx_etf_data", "etf_data", "etf_df", "krx_df"],
+        "etf_df": ["etf_df", "krx_etf_data", "etf_data"],
+        "etf_data": ["etf_data", "krx_etf_data", "etf_df"],
+    }
+
+    for param_name in params:
+        if param_name in available_kwargs:
+            call_kwargs[param_name] = available_kwargs[param_name]
+            continue
+        for cand in aliases.get(param_name, []):
+            if cand in available_kwargs and available_kwargs[cand] is not None:
+                call_kwargs[param_name] = available_kwargs[cand]
+                break
+
+    return fn(**call_kwargs)
 
 
 def _load_context() -> Dict[str, Any]:
@@ -59,12 +82,25 @@ def _load_context() -> Dict[str, Any]:
         "config": cfg,
         "params": cfg,
         "global_data": global_data,
+        "data_store": global_data,
         "krx_etf_data": krx_etf_data,
+        "etf_df": krx_etf_data,
+        "etf_data": krx_etf_data,
         "data": {
             "global_data": global_data,
             "krx_etf_data": krx_etf_data,
         },
     }
+
+
+def _is_empty_result(out: Dict[str, Any]) -> bool:
+    if not out:
+        return True
+    if out.get("obs_count") == 0 and all(
+        v is None for k, v in out.items() if k not in {"analysis_period", "obs_count", "fx_peak_reversal_events"}
+    ):
+        return True
+    return False
 
 
 def _run_module_best_dict(
@@ -92,7 +128,7 @@ def _run_module_best_dict(
     for fn in ordered_fns:
         try:
             out = _call_with_supported_kwargs(fn, context)
-            if isinstance(out, dict) and out:
+            if isinstance(out, dict) and not _is_empty_result(out):
                 print(f"[Analyzer] {mod.__name__}.{fn.__name__} -> keys={list(out.keys())}")
                 return out
         except Exception as exc:
