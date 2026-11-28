@@ -81,3 +81,135 @@ def _eval_bok_mpb(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "checkpoint": key,
             "status": "pending",
+            "signal": "PENDING",
+            "value": item,
+            "reason": "한은 금통위 기준금리·2027년 전망 하향 여부·포워드 가이던스·3Y-10Y 스프레드 미입력",
+        }
+
+    signal = "GROWTH_INFLATION_DOWNGRADE_BIAS" if (bool(g_down) or bool(i_down)) else "HOLD_OR_HAWKISH_GUIDANCE"
+    reason = (
+        f"기준금리 {base_rate}%, 2027년 성장/물가 하향({g_down}/{i_down}), "
+        f"3M 가이던스({fwd}), 국고채 3Y-10Y 스프레드 {spread}bp"
+    )
+    return {
+        "checkpoint": key,
+        "status": "evaluated",
+        "signal": signal,
+        "value": item,
+        "reason": reason,
+    }
+
+
+def _eval_bfcm_trade(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
+    bfcm = item.get("nrf_adobe_bfcm_online_sales_growth_pct")
+    semi = item.get("kr_nov_1_20_semi_export_growth_pct")
+    balance = item.get("kr_nov_1_20_trade_balance_usd_b")
+
+    if all(v is None for v in [bfcm, semi, balance]):
+        return {
+            "checkpoint": key,
+            "status": "pending",
+            "signal": "PENDING",
+            "value": item,
+            "reason": "BFCM 온라인 소비 및 한국 11/1~20 수출입 잠정치 미입력",
+        }
+
+    is_positive = (bfcm is not None and float(bfcm) > 0) or (semi is not None and float(semi) > 0)
+    signal = "SUPPORTIVE_DEMAND_AND_EXPORTS" if is_positive else "CAUTIOUS_MOMENTUM"
+    reason = f"BFCM 온라인 성장 {bfcm}%, 11/1~20 반도체 수출 {semi}%, 무역수지 ${balance}B"
+    return {
+        "checkpoint": key,
+        "status": "evaluated",
+        "signal": signal,
+        "value": item,
+        "reason": reason,
+    }
+
+
+def _eval_flows_etf(key: str, item: Dict[str, Any]) -> Dict[str, Any]:
+    book = item.get("institutional_book_closing_flow_krw_b")
+    div_arb = item.get("dividend_arbitrage_flow_krw_b")
+    fut = item.get("foreign_kospi200_futures_cum_net_buy_krw_b")
+    spread_pct = item.get("us_holiday_early_close_etf_spread_pct")
+    if spread_pct is None:
+        spread_pct = item.get("us_etf_max_spread_pct")
+    prem_pct = item.get("us_holiday_early_close_etf_premium_discount_pct")
+    if prem_pct is None:
+        prem_pct = item.get("us_etf_max_disparity_pct")
+
+    if all(v is None for v in [book, div_arb, fut, spread_pct, prem_pct]):
+        return {
+            "checkpoint": key,
+            "status": "pending",
+            "signal": "PENDING",
+            "value": item,
+            "reason": "기관 북클로징·배당 차익거래·외인 선물·휴장/조기폐장 ETF 스프레드 및 괴리율 미입력",
+        }
+
+    has_dislocation = (
+        (prem_pct is not None and abs(float(prem_pct)) >= 0.5)
+        or (spread_pct is not None and float(spread_pct) >= 0.3)
+    )
+    signal = "ETF_DISLOCATION_ALERT" if has_dislocation else "FLOW_AND_ETF_NORMAL"
+    reason = (
+        f"기관 북클로징 {book}B, 배당차익 {div_arb}B, 외인선물 누적 {fut}B, "
+        f"ETF 스프레드 {spread_pct}% / 괴리율 {prem_pct}%"
+    )
+    return {
+        "checkpoint": key,
+        "status": "evaluated",
+        "signal": signal,
+        "value": item,
+        "reason": reason,
+    }
+
+
+def evaluate_checkpoints(input_path: Path = Path("data/checkpoints_input.json")) -> Dict[str, Any]:
+    payload = load_checkpoints_payload(Path(input_path))
+    if not payload:
+        return _default_pending_result("checkpoints_input.json이 비어 있거나 유효하지 않음")
+
+    items = _extract_items(payload)
+    if not items:
+        return _default_pending_result("체크포인트 입력 항목이 비어 있음")
+
+    evaluations: List[Dict[str, Any]] = []
+    for key, item_data in items.items():
+        if not isinstance(item_data, dict):
+            continue
+        if key in {"us_gdp_and_core_pce", "us_macro_1125"}:
+            evaluations.append(_eval_us_macro(key, item_data))
+        elif key in {"bok_mpb_and_rates", "bok_mpb_1126"}:
+            evaluations.append(_eval_bok_mpb(key, item_data))
+        elif key in {"bfcm_and_kr_trade", "bfcm_kr_trade"}:
+            evaluations.append(_eval_bfcm_trade(key, item_data))
+        elif key in {"flows_and_etf_dislocation", "flows_and_etf_lp"}:
+            evaluations.append(_eval_flows_etf(key, item_data))
+        else:
+            has_val = any(v is not None for v in item_data.values())
+            evaluations.append({
+                "checkpoint": key,
+                "status": "evaluated" if has_val else "pending",
+                "signal": "EVALUATED" if has_val else "PENDING",
+                "value": item_data,
+                "reason": "입력값 반영 완료" if has_val else "입력값 대기 중",
+            })
+
+    evaluated_count = sum(1 for e in evaluations if e["status"] == "evaluated")
+    if evaluated_count == 0:
+        overall_status = "pending_values"
+    else:
+        overall_status = "evaluated_with_provided_inputs"
+
+    return {
+        "status": overall_status,
+        "checkpoint_window": payload.get("checkpoint_window", "2026-11-25..2026-11-27"),
+        "evaluated_count": evaluated_count,
+        "total_count": len(evaluations),
+        "evaluations": evaluations,
+    }
+
+
+if __name__ == "__main__":
+    result = evaluate_checkpoints()
+    print(json.dumps(result, indent=2, ensure_ascii=False))
