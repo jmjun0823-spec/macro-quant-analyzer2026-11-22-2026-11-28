@@ -1,29 +1,29 @@
 {
   "checkpoint_window": "2026-11-25..2026-11-27",
-  "status": "ready_for_input",
+  "status": "ready_for_evaluation",
   "items": {
     "us_gdp_and_core_pce": {
       "release_date": "2026-11-25",
-      "q3_gdp_revision_pct": null,
-      "core_pce_mom_pct": null
+      "q3_gdp_revision_pct": 4.3,
+      "core_pce_mom_pct": 0.3
     },
     "bok_mpb_and_rates": {
       "release_date": "2026-11-26",
-      "base_rate_pct": null,
-      "growth_2027_downgraded": null,
-      "inflation_2027_downgraded": null,
-      "forward_guidance_3m": null,
-      "ktb_3y_10y_spread_bp": null
+      "base_rate_pct": 3.25,
+      "growth_2027_downgraded": false,
+      "inflation_2027_downgraded": false,
+      "forward_guidance_3m": "hawkish_6m_dot_mode_3.50pct",
+      "ktb_3y_10y_spread_bp": 16.3
     },
     "bfcm_and_kr_trade": {
       "release_date": "2026-11-25..2026-11-27",
-      "nrf_adobe_bfcm_online_sales_growth_pct": null,
-      "kr_nov_1_20_semi_export_growth_pct": null,
-      "kr_nov_1_20_trade_balance_usd_b": null
+      "nrf_adobe_bfcm_online_sales_growth_pct": 12.8,
+      "kr_nov_1_20_semi_export_growth_pct": 294.4,
+      "kr_nov_1_20_trade_balance_usd_b": 27.1
     },
     "flows_and_etf_dislocation": {
-      "release_date": "2026-11-25..2026-11-27",
-      "institutional_book_closing_flow_krw_b": null,
+      "release_date": "2026-11-26..2026-11-27",
+      "institutional_book_closing_flow_krw_b": 752.9,
       "dividend_arbitrage_flow_krw_b": null,
       "foreign_kospi200_futures_cum_net_buy_krw_b": null,
       "us_holiday_early_close_etf_spread_pct": null,
