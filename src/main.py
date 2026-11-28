@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import pandas as pd
+
 from src.checkpoint_evaluator import evaluate_checkpoints, format_checkpoint_evaluation_md
+from src.config_loader import load_config
+from src.data_loader import fetch_global_data, fetch_krx_etf_data
 from src.visualization import generate_charts
 
 
@@ -43,74 +47,26 @@ def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[s
     return fn(**filtered)
 
 
-def _load_config_and_data() -> Dict[str, Any]:
-    context: Dict[str, Any] = {
+def _load_context() -> Dict[str, Any]:
+    cfg = load_config()
+    global_data = fetch_global_data(cfg)
+    krx_etf_data = fetch_krx_etf_data(cfg)
+
+    return {
         "root_dir": ROOT_DIR,
         "output_dir": OUTPUT_DIR,
         "data_dir": DATA_DIR,
         "config_dir": CONFIG_DIR,
-    }
-
-    try:
-        cfg_mod = importlib.import_module("src.config_loader")
-        for fn_name in ["load_config", "get_config", "read_config"]:
-            fn = getattr(cfg_mod, fn_name, None)
-            if callable(fn):
-                cfg = _call_with_supported_kwargs(fn, context)
-                if cfg is not None:
-                    context["config"] = cfg
-                break
-    except Exception as exc:
-        print(f"[Warn] config_loader skipped: {exc}")
-
-    try:
-        dl_mod = importlib.import_module("src.data_loader")
-        for fn_name in ["load_all_data", "load_market_data", "load_data", "fetch_all_data"]:
-            fn = getattr(dl_mod, fn_name, None)
-            if callable(fn):
-                data = _call_with_supported_kwargs(fn, context)
-                if data is not None:
-                    context["data"] = data
-                break
-    except Exception as exc:
-        print(f"[Warn] data_loader skipped: {exc}")
-
-    return context
-
-
-def _build_analyzer_kwargs(context: Dict[str, Any]) -> Dict[str, Any]:
-    raw_cfg = context.get("config")
-    params = raw_cfg if isinstance(raw_cfg, dict) else {}
-
-    raw_data = context.get("data")
-    if isinstance(raw_data, dict):
-        global_data = (
-            raw_data.get("global_data")
-            if isinstance(raw_data.get("global_data"), dict)
-            else raw_data
-        )
-        krx_etf_data = raw_data.get("krx_etf_data")
-    else:
-        global_data = {}
-        krx_etf_data = None
-
-    if krx_etf_data is None:
-        try:
-            import pandas as pd
-
-            krx_etf_data = pd.DataFrame()
-        except Exception:
-            krx_etf_data = None
-
-    kwargs = dict(context)
-    kwargs.update(
-        {
-            "params": params,
+        "cfg": cfg,
+        "config": cfg,
+        "params": cfg,
+        "global_data": global_data,
+        "krx_etf_data": krx_etf_data,
+        "data": {
             "global_data": global_data,
             "krx_etf_data": krx_etf_data,
-        }
-    )
-    return kwargs
+        },
+    }
 
 
 def _run_module_best_dict(
@@ -141,14 +97,6 @@ def _run_module_best_dict(
             if isinstance(out, dict) and out:
                 print(f"[Analyzer] {mod.__name__}.{fn.__name__} -> keys={list(out.keys())}")
                 return out
-        except TypeError:
-            try:
-                out = fn()
-                if isinstance(out, dict) and out:
-                    print(f"[Analyzer] {mod.__name__}.{fn.__name__}() -> keys={list(out.keys())}")
-                    return out
-            except Exception:
-                continue
         except Exception as exc:
             print(f"[Warn] {mod.__name__}.{fn.__name__} failed: {exc}")
 
@@ -156,8 +104,7 @@ def _run_module_best_dict(
 
 
 def run_all_analyzers() -> Dict[str, Any]:
-    raw_context = _load_config_and_data()
-    context = _build_analyzer_kwargs(raw_context)
+    context = _load_context()
     aggregated: Dict[str, Any] = {}
 
     specs = [
@@ -299,24 +246,8 @@ def save_outputs(
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    base_results: Dict[str, Any] = {}
-    for candidate in [OUTPUT_DIR / "verification_results.json", ROOT_DIR / "verification_results.json"]:
-        if candidate.exists():
-            try:
-                loaded = json.loads(candidate.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    base_results = loaded
-                    break
-            except json.JSONDecodeError:
-                pass
-
     computed = run_all_analyzers()
-    for k, v in computed.items():
-        if isinstance(v, dict) and v:
-            base_results[k] = v
-
-    save_outputs(base_results, output_dir=OUTPUT_DIR)
+    save_outputs(computed, output_dir=OUTPUT_DIR)
     print(f"[Done] Saved outputs to {OUTPUT_DIR}")
 
 
