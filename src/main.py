@@ -58,16 +58,15 @@ def _build_context() -> Dict[str, Any]:
         "cfg": cfg,
         "config": cfg,
         "params": cfg,
+        # analyzer_macro_fx.analyze_macro_and_fx_sensitivity(data, params) 및
+        # quant_allocation.simulate_tactical_allocation(data, params)가 기대하는 티커 딕셔너리
+        "data": global_data,
         "global_data": global_data,
         "data_store": global_data,
         "market_data": global_data,
         "krx_etf_data": krx_etf_data,
         "etf_df": krx_etf_data,
         "etf_data": krx_etf_data,
-        "data": {
-            "global_data": global_data,
-            "krx_etf_data": krx_etf_data,
-        },
         "kospi_df": _df("KOSPI"),
         "kosdaq_df": _df("KOSDAQ"),
         "sp500_df": _df("SP500"),
@@ -106,22 +105,13 @@ def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[s
         "cfg": ["cfg", "config", "params"],
         "config": ["config", "cfg", "params"],
         "params": ["params", "cfg", "config"],
+        "data": ["global_data", "data_store", "market_data", "data"],
         "global_data": ["global_data", "data_store", "market_data", "data"],
         "data_store": ["data_store", "global_data", "market_data", "data"],
         "market_data": ["market_data", "global_data", "data_store", "data"],
         "krx_etf_data": ["krx_etf_data", "etf_df", "etf_data"],
         "etf_df": ["etf_df", "krx_etf_data", "etf_data"],
         "etf_data": ["etf_data", "krx_etf_data", "etf_df"],
-        "spx_df": ["sp500_df"],
-        "sp500": ["sp500_df"],
-        "kospi": ["kospi_df"],
-        "kosdaq": ["kosdaq_df"],
-        "nasdaq": ["nasdaq_df"],
-        "sox": ["sox_df"],
-        "dxy": ["dxy_df"],
-        "usdkrw": ["usdkrw_df"],
-        "us10y": ["us10y_df"],
-        "ewy": ["ewy_df"],
     }
 
     for param_name, param in params.items():
@@ -157,7 +147,15 @@ def _has_meaningful_values(out: Dict[str, Any]) -> bool:
             return any(_walk(x) for x in obj)
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if k in {"analysis_period", "obs_count", "obs", "fx_peak_reversal_events", "window", "index_period", "etf_period"}:
+                if k in {
+                    "analysis_period",
+                    "obs_count",
+                    "obs",
+                    "fx_peak_reversal_events",
+                    "window",
+                    "index_period",
+                    "etf_period",
+                }:
                     continue
                 if _walk(v):
                     return True
@@ -265,8 +263,8 @@ def run_all_analyzers() -> Dict[str, Any]:
         (
             "src.quant_allocation",
             [
+                "simulate_tactical_allocation",
                 "analyze_quant_risk_and_allocation",
-                "simulate_quant_allocation",
                 "run_quant_allocation",
                 "run_analysis",
                 "analyze",
