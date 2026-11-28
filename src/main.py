@@ -37,43 +37,20 @@ def _format_p_val(val: Any) -> str:
         return str(val)
 
 
-def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[str, Any]) -> Any:
-    sig = inspect.signature(fn)
-    params = sig.parameters
-    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
-    if accepts_var_kw:
-        return fn(**available_kwargs)
-
-    call_kwargs: Dict[str, Any] = {}
-    aliases: Dict[str, List[str]] = {
-        "cfg": ["cfg", "config", "params"],
-        "config": ["config", "cfg", "params"],
-        "params": ["params", "cfg", "config"],
-        "global_data": ["global_data", "data_store", "market_data", "data"],
-        "data_store": ["data_store", "global_data", "market_data", "data"],
-        "krx_etf_data": ["krx_etf_data", "etf_data", "etf_df", "krx_df"],
-        "etf_df": ["etf_df", "krx_etf_data", "etf_data"],
-        "etf_data": ["etf_data", "krx_etf_data", "etf_df"],
-    }
-
-    for param_name in params:
-        if param_name in available_kwargs:
-            call_kwargs[param_name] = available_kwargs[param_name]
-            continue
-        for cand in aliases.get(param_name, []):
-            if cand in available_kwargs and available_kwargs[cand] is not None:
-                call_kwargs[param_name] = available_kwargs[cand]
-                break
-
-    return fn(**call_kwargs)
+def _empty_ohlcv() -> pd.DataFrame:
+    return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume", "Return", "Log_Return"])
 
 
-def _load_context() -> Dict[str, Any]:
+def _build_context() -> Dict[str, Any]:
     cfg = load_config()
     global_data = fetch_global_data(cfg)
     krx_etf_data = fetch_krx_etf_data(cfg)
 
-    return {
+    def _df(key: str) -> pd.DataFrame:
+        val = global_data.get(key)
+        return val if isinstance(val, pd.DataFrame) else _empty_ohlcv()
+
+    context: Dict[str, Any] = {
         "root_dir": ROOT_DIR,
         "output_dir": OUTPUT_DIR,
         "data_dir": DATA_DIR,
@@ -90,7 +67,77 @@ def _load_context() -> Dict[str, Any]:
             "global_data": global_data,
             "krx_etf_data": krx_etf_data,
         },
+        # 개별 DataFrame 인자 매핑 (analyzer_year_end, analyzer_macro_fx, analyzer_thanksgiving, quant_allocation 대응)
+        "kospi_df": _df("KOSPI"),
+        "kosdaq_df": _df("KOSDAQ"),
+        "sp500_df": _df("SP500"),
+        "nasdaq_df": _df("NASDAQ"),
+        "sox_df": _df("SOX"),
+        "dxy_df": _df("DXY"),
+        "usdkrw_df": _df("USDKRW"),
+        "us10y_df": _df("US10Y"),
+        "ewy_df": _df("EWY"),
+        "tlt_df": _df("TLT"),
+        "hyg_df": _df("HYG"),
+        "xrt_df": _df("XRT"),
+        "iyt_df": _df("IYT"),
+        # config 내 주요 파라미터 인자 매핑
+        "start_mmdd": cfg.get("year_end_start_mmdd", "11-20"),
+        "end_mmdd": cfg.get("year_end_end_mmdd", "12-26"),
+        "lookback_days": cfg.get("thanksgiving_lookback_days", 20),
+        "trading_days_per_year": cfg.get("trading_days_per_year", 252),
     }
+
+    for k, v in cfg.items():
+        if k not in context:
+            context[k] = v
+
+    return context
+
+
+def _call_with_supported_kwargs(fn: Callable[..., Any], available_kwargs: Dict[str, Any]) -> Any:
+    sig = inspect.signature(fn)
+    params = sig.parameters
+    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    if accepts_var_kw:
+        return fn(**available_kwargs)
+
+    call_kwargs: Dict[str, Any] = {}
+    aliases: Dict[str, List[str]] = {
+        "cfg": ["cfg", "config", "params"],
+        "config": ["config", "cfg", "params"],
+        "params": ["params", "cfg", "config"],
+        "global_data": ["global_data", "data_store", "data"],
+        "data_store": ["data_store", "global_data", "data"],
+        "krx_etf_data": ["krx_etf_data", "etf_df", "etf_data"],
+        "etf_df": ["etf_df", "krx_etf_data", "etf_data"],
+        "etf_data": ["etf_data", "krx_etf_data", "etf_df"],
+        "spx_df": ["sp500_df"],
+        "sp500": ["sp500_df"],
+        "kospi": ["kospi_df"],
+        "kosdaq": ["kosdaq_df"],
+        "nasdaq": ["nasdaq_df"],
+        "sox": ["sox_df"],
+        "dxy": ["dxy_df"],
+        "usdkrw": ["usdkrw_df"],
+        "us10y": ["us10y_df"],
+        "ewy": ["ewy_df"],
+    }
+
+    for param_name, param in params.items():
+        if param_name in available_kwargs:
+            call_kwargs[param_name] = available_kwargs[param_name]
+            continue
+        matched = False
+        for cand in aliases.get(param_name, []):
+            if cand in available_kwargs and available_kwargs[cand] is not None:
+                call_kwargs[param_name] = available_kwargs[cand]
+                matched = True
+                break
+        if not matched and param.default is inspect.Parameter.empty:
+            raise TypeError(f"Missing required parameter: {param_name}")
+
+    return fn(**call_kwargs)
 
 
 def _is_empty_result(out: Dict[str, Any]) -> bool:
@@ -132,7 +179,7 @@ def _run_module_best_dict(
                 print(f"[Analyzer] {mod.__name__}.{fn.__name__} -> keys={list(out.keys())}")
                 return out
         except Exception as exc:
-            print(f"[Warn] {mod.__name__}.{fn.__name__} failed: {exc}")
+            print(f"[Warn] {mod.__name__}.{fn.__name__} skipped: {exc}")
 
     return None
 
@@ -157,7 +204,7 @@ def _normalize_all_items_bucket(aggregated: Dict[str, Any], out: Dict[str, Any])
 
 
 def run_all_analyzers() -> Dict[str, Any]:
-    context = _load_context()
+    context = _build_context()
     aggregated: Dict[str, Any] = {}
 
     specs = [
